@@ -92,6 +92,40 @@ class ansyswrapper:
 
         retcode = call([self.findPathVersion()] + self.defaultArgs().split(" "))
         os.chdir(cwd)
+
+        exitcodes = dict()
+
+        exitcodes[0] = 'Normal Exit'
+        exitcodes[1] = 'Stack Error'
+        exitcodes[2] = 'Stack Error'
+        exitcodes[3] = 'Stack Error'
+        exitcodes[4] = 'Stack Error'
+        exitcodes[5] = 'Command Line Argument Error'
+        exitcodes[6] = 'Accounting File Error'
+        exitcodes[7] = 'Auth File Verification Error'
+        exitcodes[8] = 'Error in ANSYS or End-of-run'
+        exitcodes[11] = 'User Routine Error'
+        exitcodes[12] = 'Macro STOP Command'
+        exitcodes[14] = 'XOX Error'
+        exitcodes[15] = 'Fatal Error'
+        exitcodes[16] = 'Possible Full Disk'
+        exitcodes[17] = 'Possible Corrupted or Missing File'
+        exitcodes[18] = 'Possible Corrupted DB File'
+        exitcodes[21] = 'Authorized Code Section Entered'
+        exitcodes[25] = 'Unable to Open X11 Server'
+        exitcodes[30] = 'Quit Signal'
+        exitcodes[31] = 'Failure to Get Signal'
+        exitcodes[32] = 'System-dependent Error'
+
+        if retcode > 32:
+            retcode = 32
+
+        if retcode in exitcodes:
+            print('------ANSYS ERROR EXIT CODE-------')
+            print('Ansys exit code = {0}, with message: {1}'.format(retcode, exitcodes[retcode]))
+            print('----------------------------------')
+            print('Terminating.......')
+            exit(retcode)
         return retcode
 
     def rectangle(self, x1, y1, x2, y2):
