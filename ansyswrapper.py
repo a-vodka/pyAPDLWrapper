@@ -3,13 +3,15 @@ import datetime
 import tempfile
 
 from subprocess import call
+import numpy as np
 
 
 class ansyswrapper:
     __matid = 0
     __csid = 10
 
-    def __init__(self, ans_hi_version=250, ans_low_version=50, anslic = 'ane3fl', infile='input.dat', outfile='output.dat', projdir = tempfile.gettempdir(), isBatch = True, jobname = None ):
+    def __init__(self, ans_hi_version=250, ans_low_version=50, anslic='ane3fl', infile='input.dat',
+                 outfile='output.dat', projdir=tempfile.gettempdir(), isBatch=True, jobname=None):
 
         self.ans_hi_version = ans_hi_version
         self.ans_low_version = ans_low_version
@@ -23,7 +25,6 @@ class ansyswrapper:
             self.jobname = 'jobname{0}-{1}-{2}--{3}-{4}'.format(dt.year, dt.month, dt.day, dt.hour, dt.minute)
         else:
             self.jobname = jobname
-
 
         self.apdl = ""
         self.apdl += "FINISH\n"
@@ -48,7 +49,6 @@ class ansyswrapper:
         self.apdl += "*VEC, vec_b, D, alloc, 3\n"
         self.apdl += "*VEC, vec_x, D, alloc, 3\n"
 
-
     def saveToFile(self, filename):
         f = open(filename, mode='w')
         f.write(self.apdl)
@@ -68,10 +68,10 @@ class ansyswrapper:
                 break
 
         if __ansversion == -1:
-            print "Ansys not found"
+            print("Ansys not found")
             return None
 
-        path += '\\bin\\'+os.environ['ANSYS_SYSDIR'] +'\\ANSYS{0}'.format(__ansversion)
+        path += '\\bin\\' + os.environ['ANSYS_SYSDIR'] + '\\ANSYS{0}'.format(__ansversion)
 
         return path
 
@@ -88,10 +88,11 @@ class ansyswrapper:
     def run(self, apdl=None):
         cwd = os.getcwd()
         os.chdir(self.projdir)
-        self.saveToFile(self.projdir+"\\"+self.inputfile)
+        self.saveToFile(self.projdir + "\\" + self.inputfile)
 
-        call([self.findPathVersion()]+self.defaultArgs().split(" "))
+        retcode = call([self.findPathVersion()] + self.defaultArgs().split(" "))
         os.chdir(cwd)
+        return retcode
 
     def rectangle(self, x1, y1, x2, y2):
         self.apdl += "RECTNG,{0},{1},{2},{3},\n".format(x1, x2, y1, y2)
@@ -101,7 +102,8 @@ class ansyswrapper:
 
     def setFEByNum(self, num):
         self.apdl += "ET, 1, {0}\n".format(num)
-#        self.apdl += "KEYOPT, 1, 3, 2\n"
+
+    #        self.apdl += "KEYOPT, 1, 3, 2\n"
 
     def createIsotropicMat(self, E, nu):
         self.__matid += 1
@@ -123,12 +125,15 @@ class ansyswrapper:
         if c66 == None:
             c66 = c44
 
-        Ex = (c11*c22*c33 + 2*c23*c12*c13 - c11*c23**2 - c22*c13**2 - c33*c12**2) / (c22*c33 - c23**2)
-        Ey = (c11*c22*c33 + 2*c23*c12*c13 - c11*c23**2 - c22*c13**2 - c33*c12**2) / (c11*c33 - c13**2)
-        Ez = (c11*c22*c33 + 2*c23*c12*c13 - c11*c23**2 - c22*c13**2 - c33*c12**2) / (c11*c22 - c12**2)
-        nuxy = (c12*c33 - c13*c23) / (c22*c33 - c23**2)
-        nuxz = (c22*c13 - c12*c23) / (c22*c33 - c23**2)
-        nuyz = (c11*c23 - c12*c13) / (c11*c33 - c13**2)
+        Ex = (c11 * c22 * c33 + 2 * c23 * c12 * c13 - c11 * c23 ** 2 - c22 * c13 ** 2 - c33 * c12 ** 2) / (
+                c22 * c33 - c23 ** 2)
+        Ey = (c11 * c22 * c33 + 2 * c23 * c12 * c13 - c11 * c23 ** 2 - c22 * c13 ** 2 - c33 * c12 ** 2) / (
+                c11 * c33 - c13 ** 2)
+        Ez = (c11 * c22 * c33 + 2 * c23 * c12 * c13 - c11 * c23 ** 2 - c22 * c13 ** 2 - c33 * c12 ** 2) / (
+                c11 * c22 - c12 ** 2)
+        nuxy = (c12 * c33 - c13 * c23) / (c22 * c33 - c23 ** 2)
+        nuxz = (c22 * c13 - c12 * c23) / (c22 * c33 - c23 ** 2)
+        nuyz = (c11 * c23 - c12 * c13) / (c11 * c33 - c13 ** 2)
 
         self.apdl += "MPTEMP,, , , , , , ,\n"
         self.apdl += "MPTEMP, 1, 0\n"
@@ -146,8 +151,8 @@ class ansyswrapper:
 
     def setAreaPropByCoord(self, x, y, matId=1, createRandomCS=False):
 
-        self.apdl += "ASEL,S,LOC,X,{0},{1}\n".format(0.95*x, 1.05*x)
-        self.apdl += "ASEL,R,LOC,Y,{0},{1}\n".format(0.95*y, 1.05*y)
+        self.apdl += "ASEL,S,LOC,X,{0},{1}\n".format(0.95 * x, 1.05 * x)
+        self.apdl += "ASEL,R,LOC,Y,{0},{1}\n".format(0.95 * y, 1.05 * y)
         csid = 0
 
         if createRandomCS:
@@ -166,6 +171,14 @@ class ansyswrapper:
         self.apdl += "ADELE,ALL, , ,1\n"
         self.apdl += "ASEL,S, , ,all\n"
 
+    def setCirlceAreaMatProps(self, rad, matId):
+        self.apdl += """
+        CSYS,1  
+        ASEL,S,LOC,X,0,{0}   
+        CSYS,0
+        AATT,       {1},
+        ASEL,S, , ,all
+        """.format(rad, matId)
 
     def setAreaProps(self, arealimit, matId=1):
 
@@ -210,7 +223,7 @@ class ansyswrapper:
         self.apdl += "DL, ALL, ,UX,0\n"
 
         self.apdl += "LSEL,S,LOC,X,{0}\n".format(x2)
-        self.apdl += "DL, ALL, ,UX,{0}\n".format(eps*x2)
+        self.apdl += "DL, ALL, ,UX,{0}\n".format(eps * x2)
         self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y1)
         self.apdl += "LSEL,A,LOC,Y,{0}\n".format(y2)
         self.apdl += "DL, ALL, ,UY,0\n"
@@ -234,7 +247,7 @@ class ansyswrapper:
         self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y1)
         self.apdl += "DL, ALL, ,UY,0\n"
         self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y2)
-        self.apdl += "DL, ALL, ,UY,{0}\n".format(eps*y2)
+        self.apdl += "DL, ALL, ,UY,{0}\n".format(eps * y2)
         self.apdl += "LSEL,S,LOC,X,{0}\n".format(x1)
         self.apdl += "LSEL,A,LOC,X,{0}\n".format(x2)
         self.apdl += "DL, ALL, ,UX,0\n"
@@ -262,7 +275,34 @@ class ansyswrapper:
         self.apdl += "LSEL,S,LOC,X,{0}\n".format(x1)
         self.apdl += "DL, ALL, ,UX,0\n"
         self.apdl += "LSEL,S,LOC,X,{0}\n".format(x2)
-        self.apdl += "DL, ALL, ,UX,{0}\n".format(eps*x2)
+        self.apdl += "DL, ALL, ,UX,{0}\n".format(eps * x2)
+
+        self.apdl += "LSEL,S, , ,all\n"
+
+        self.solve()
+        self.post()
+        self.prep7()
+
+        self.apdl += """
+            mat_s(3,1) = 0
+            mat_s(3,2) = SXX0
+            mat_s(3,3) = SYY0
+            vec_b(3)=EYY0\n"""
+
+    def applyTensXandY(self, x1, y1, x2, y2, epsx, epsy):
+
+        self.prep7()
+        self.clearbc()
+
+        self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y1)
+        self.apdl += "DL, ALL, ,UY,0\n"
+        self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y2)
+        self.apdl += "DL, ALL, ,UY,{0}\n".format(epsy * y2)
+
+        self.apdl += "LSEL,S,LOC,X,{0}\n".format(x1)
+        self.apdl += "DL, ALL, ,UX,0\n"
+        self.apdl += "LSEL,S,LOC,X,{0}\n".format(x2)
+        self.apdl += "DL, ALL, ,UX,{0}\n".format(epsx * x2)
 
         self.apdl += "LSEL,S, , ,all\n"
 
@@ -281,14 +321,13 @@ class ansyswrapper:
         self.prep7()
         self.clearbc()
 
-
         self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y1)
         self.apdl += "DL, ALL, ,ALL,0\n"
-#        self.apdl += "LSEL,S,LOC,X,{0}\n".format(x1)
-#        self.apdl += "DL, ALL, ,UY,0\n"
+        #        self.apdl += "LSEL,S,LOC,X,{0}\n".format(x1)
+        #        self.apdl += "DL, ALL, ,UY,0\n"
 
         self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y2)
-        self.apdl += "DL, ALL, ,UX,{0}\n".format(eps*x2)
+        self.apdl += "DL, ALL, ,UX,{0}\n".format(eps * x2)
         self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y2)
         self.apdl += "DL, ALL, ,UY,{0}\n".format(0)
 
@@ -298,7 +337,6 @@ class ansyswrapper:
         self.post()
         self.prep7()
         self.apdl += "GXYe = SXY0/EXY0\n"
-
 
     def solve(self):
         self.apdl += "FINISH\n"
@@ -314,6 +352,53 @@ class ansyswrapper:
     def prep7(self):
         self.apdl += "FINISH\n"
         self.apdl += "/prep7\n"
+
+    def eof(self):
+        self.apdl += "/eof\n"
+
+    def getAVGStressAndStrains(self):
+        res = np.loadtxt(self.projdir + '/sigma_out.csv', dtype=float, delimiter=';', skiprows=1, max_rows=1)
+        stress = np.zeros((3, 3))
+        strain = np.zeros((3, 3))
+
+        stress[0,0] = res[0]
+        stress[1, 1] = res[1]
+        stress[2, 2] = res[2]
+        stress[0, 1] = stress[1, 0] = res[3]
+        stress[0, 2] = stress[2, 0] = res[4]
+        stress[1, 2] = stress[2, 1] = res[5]
+
+        strain[0,0] = res[6]
+        strain[1, 1] = res[7]
+        strain[2, 2] = res[8]
+        strain[0, 1] = strain[1, 0] = res[9]
+        strain[0, 2] = strain[2, 0] = res[10]
+        strain[1, 2] = strain[2, 1] = res[11]
+
+        return stress, strain
+
+    def getMaxStressForEachMaterial(self):
+        res = np.loadtxt(self.projdir + '/max_stress_out.csv', dtype=float, delimiter=';', max_rows=self.__matid)
+        return res
+
+    def saveMaxStressForEachMaterial(self):
+        self.apdl += """
+        /post1
+        *cfopen,'max_stress_out',csv,,
+
+        *do,i,1,{0}, 1 
+            ESEL,S,MAT,,i
+            /SHOW, PNG 
+            PLNSOL, S,EQV, 0, 1.0
+            /SHOW,CLOSE
+            *GET, MaxStressPar, PLNSOL, 0, MAX
+            *vwrite,MaxStressPar,
+%G
+        *enddo
+        esel,all
+        """.format(self.__matid)
+
+        pass
 
     def precessElasticConstants(self):
         self.apdl += """
@@ -378,12 +463,12 @@ PLNSOL, S, EQV, 0, 1.0
 
 NSEL,R,S,EQV,,, ,0  
 
-*cfopen,'sigma_out',csv,,append
+*cfopen,'sigma_out',csv,,
 
 *if,it_num,ne,0,then
 
 *vwrite,'sx','sy','sz','sxy','sxz','syz','ex','ey','ez','exy','exz','eyz'
-%C;%C;%C;%C;%C;%C;;%C;%C;%C;%C;%C;%C
+%C;%C;%C;%C;%C;%C;%C;%C;%C;%C;%C;%C
 
 it_num = 0
 *endif
@@ -454,15 +539,12 @@ EYZ0 = TOTEYZ/TOTVOL
 
 
 *vwrite,SXX0 ,SYY0 ,SZZ0 ,SXY0 ,SXZ0 ,SYZ0, EXX0 ,EYY0 ,EZZ0 ,EXY0 ,EXZ0 ,EYZ0 
-%E;%E;%E;%E;%E;%E;;%E;%E;%E;%E;%E;%E;
+%E;%E;%E;%E;%E;%E;%E;%E;%E;%E;%E;%E
 
 *cfclos
+
 
 allsel,all
 
 *END  
 """
-
-
-
-
