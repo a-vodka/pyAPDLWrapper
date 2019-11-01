@@ -55,7 +55,7 @@ class ansyswrapper:
         f.close()
 
     def getNP(self):
-        return os.environ['NUMBER_OF_PROCESSORS']
+        return 4  # os.environ['NUMBER_OF_PROCESSORS']
 
     def findPathVersion(self):
 
@@ -86,6 +86,8 @@ class ansyswrapper:
             )
 
     def run(self, apdl=None):
+
+        self.apdl += "/EXIT, NOSAVE,\n"
         cwd = os.getcwd()
         os.chdir(self.projdir)
         self.saveToFile(self.projdir + "\\" + self.inputfile)
@@ -95,7 +97,7 @@ class ansyswrapper:
 
         exitcodes = dict()
 
-        exitcodes[0] = 'Normal Exit'
+        # exitcodes[0] = 'Normal Exit'
         exitcodes[1] = 'Stack Error'
         exitcodes[2] = 'Stack Error'
         exitcodes[3] = 'Stack Error'
@@ -137,7 +139,7 @@ class ansyswrapper:
     def setFEByNum(self, num):
         self.apdl += "ET, 1, {0}\n".format(num)
 
-    #        self.apdl += "KEYOPT, 1, 3, 2\n"
+        #self.apdl += "KEYOPT, 1, 3, 2\n"
 
     def createIsotropicMat(self, E, nu):
         self.__matid += 1
@@ -395,14 +397,14 @@ class ansyswrapper:
         stress = np.zeros((3, 3))
         strain = np.zeros((3, 3))
 
-        stress[0,0] = res[0]
+        stress[0, 0] = res[0]
         stress[1, 1] = res[1]
         stress[2, 2] = res[2]
         stress[0, 1] = stress[1, 0] = res[3]
         stress[0, 2] = stress[2, 0] = res[4]
         stress[1, 2] = stress[2, 1] = res[5]
 
-        strain[0,0] = res[6]
+        strain[0, 0] = res[6]
         strain[1, 1] = res[7]
         strain[2, 2] = res[8]
         strain[0, 1] = strain[1, 0] = res[9]
@@ -429,6 +431,7 @@ class ansyswrapper:
             *vwrite,MaxStressPar,
 %G
         *enddo
+        *cfclos
         esel,all
         """.format(self.__matid)
 
