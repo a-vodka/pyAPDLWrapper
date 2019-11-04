@@ -120,7 +120,7 @@ class ansyswrapper:
         exitcodes[32] = 'System-dependent Error'
 
         if retcode > 32:
-            retcode = 32
+            exitcodes[retcode] = 'Unknown Error. Check for *.lock files in working directory and delete it'
 
         if retcode in exitcodes:
             print('------ANSYS ERROR EXIT CODE-------')
@@ -136,10 +136,16 @@ class ansyswrapper:
     def circle(self, x, y, rad):
         self.apdl += "CYL4, {0}, {1}, {2}\n".format(x, y, rad)
 
+    def ellipse(self, x, y, r1, r2):
+        self.apdl += "ASEL, NONE\n"
+        self.circle(x, y, 1)
+        self.apdl += "ARSCALE, ALL, , , {0}, {1}, , , 1, 1\n".format(r1, r2)
+        self.apdl += "ASEL, ALL\n"
+
     def setFEByNum(self, num):
         self.apdl += "ET, 1, {0}\n".format(num)
 
-        #self.apdl += "KEYOPT, 1, 3, 2\n"
+        # self.apdl += "KEYOPT, 1, 3, 2\n"
 
     def createIsotropicMat(self, E, nu):
         self.__matid += 1
