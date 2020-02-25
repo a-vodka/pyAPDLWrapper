@@ -9,6 +9,7 @@ import numpy as np
 class ansyswrapper:
     __matid = 0
     __csid = 10
+    __ls_num = 1
 
     def __init__(self, ans_hi_version=250, ans_low_version=50, anslic='ane3fl', infile='input.dat',
                  outfile='output.dat', projdir=tempfile.gettempdir(), isBatch=True, jobname=None):
@@ -31,7 +32,6 @@ class ansyswrapper:
         self.apdl += "/CLEAR,START\n"
         self.apdl += "/prep7\n"
         self.apdl += "it_num = 1\n"
-        self.apdl += self.__post_new
         self.projdir = projdir
         self.__isBatch = isBatch
 
@@ -380,10 +380,39 @@ class ansyswrapper:
         self.prep7()
         self.apdl += "GXYe = SXY0/EXY0\n"
 
+    def applyLoadStep(self, x1, y1, x2, y2, epsx, epsy, epsxy=None):
+        self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y1)
+        self.apdl += "DL, ALL, ,UY,0\n"
+        self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y2)
+        self.apdl += "DL, ALL, ,UY,{0}\n".format(epsy * y2)
+
+        self.apdl += "LSEL,S,LOC,X,{0}\n".format(x1)
+        self.apdl += "DL, ALL, ,UX,0\n"
+        self.apdl += "LSEL,S,LOC,X,{0}\n".format(x2)
+        self.apdl += "DL, ALL, ,UX,{0}\n".format(epsx * x2)
+
+        if epsxy:
+            self.apdl += "LSEL,S,LOC,Y,{0}\n".format(y2)
+            self.apdl += "DL, ALL, ,UX,{0}\n".format(epsxy * x2)
+
+        self.apdl += "LSEL,S, , ,all\n"
+
+        self.apdl += "TIME,{}\n".format(self.__ls_num)
+        self.apdl += "LSWRITE,{}\n".format(self.__ls_num)
+        self.clearbc()
+        self.__ls_num += 1
+
     def solve(self):
+        self.apdl += self.__post_new.format(self.__ls_num-1)
         self.apdl += "FINISH\n"
         self.apdl += "/SOL\n"
         self.apdl += "SOLVE\n"
+
+    def solveAllLs(self):
+        self.apdl += self.__post_new.format(self.__ls_num - 1)
+        self.apdl += "FINISH\n"
+        self.apdl += "/SOL\n"
+        self.apdl += "LSSOLVE, 1, {}, 1,\n".format(self.__ls_num - 1)
 
     def post(self):
         self.apdl += "*use,post_new1.mac\n"
@@ -398,48 +427,87 @@ class ansyswrapper:
     def eof(self):
         self.apdl += "/eof\n"
 
-    def getAVGStressAndStrains(self):
-        res = np.loadtxt(self.projdir + '/sigma_out.csv', dtype=float, delimiter=';', skiprows=1, max_rows=1)
+    def getAVGStressAndStrains(self, n = -1):
+        res = np.loadtxt(self.projdir + '/sigma_out.csv', dtype=float, delimiter=';', skiprows=1)
         stress = np.zeros((3, 3))
         strain = np.zeros((3, 3))
 
-        stress[0, 0] = res[0]
-        stress[1, 1] = res[1]
-        stress[2, 2] = res[2]
-        stress[0, 1] = stress[1, 0] = res[3]
-        stress[0, 2] = stress[2, 0] = res[4]
-        stress[1, 2] = stress[2, 1] = res[5]
+        stress[0, 0] = res[n, 0]
+        stress[1, 1] = res[n, 1]
+        stress[2, 2] = res[n, 2]
+        stress[0, 1] = stress[1, 0] = res[n, 3]
+        stress[0, 2] = stress[2, 0] = res[n, 4]
+        stress[1, 2] = stress[2, 1] = res[n, 5]
 
-        strain[0, 0] = res[6]
-        strain[1, 1] = res[7]
-        strain[2, 2] = res[8]
-        strain[0, 1] = strain[1, 0] = res[9]
-        strain[0, 2] = strain[2, 0] = res[10]
-        strain[1, 2] = strain[2, 1] = res[11]
+        strain[0, 0] = res[n, 6]
+        strain[1, 1] = res[n, 7]
+        strain[2, 2] = res[n, 8]
+        strain[0, 1] = strain[1, 0] = res[n, 9]
+        strain[0, 2] = strain[2, 0] = res[n, 10]
+        strain[1, 2] = strain[2, 1] = res[n, 11]
 
         return stress, strain
 
-    def getMaxStressForEachMaterial(self):
-        res = np.loadtxt(self.projdir + '/max_stress_out.csv', dtype=float, delimiter=';', max_rows=self.__matid)
-        return res
+    def getMaxStressForEachMaterial(self, n):
+        res = np.loadtxt(self.projdir + '/max_stress_out.csv', dtype=float, delimiter=';')
+        return res[2*n:2*n+2, :]
 
     def saveMaxStressForEachMaterial(self):
         self.apdl += """
-        /post1
-        *cfopen,'max_stress_out',csv,,
+     /post1
+      allsel,all
+      *cfopen,'max_stress_out',csv,,
+      *do,j,1,{1},1 
+      *do,i,1,{0},1 
+         SET,,, ,,, ,j 
+         ESEL,S,MAT,,i
+         *GET, allnodecount, node,,num,max
+         NSEL,S,S,EQV,,, ,0  
+         *GET, nodecount, node,0,count
+         *dim,NMASK,array,allnodecount 
+         *dim,SeqvInit,array,allnodecount 
+         
+         *dim,Seqv,array,allnodecount
+         *dim,sx,array,allnodecount
+         *dim,sy,array,allnodecount
+         *dim,sz,array,allnodecount
+         
+         *vget,NMASK(1),node,1,nsel
+         *vmask,NMASK(1)
+         *vget,Seqv,node,1,S,eqv
+         *vmask,NMASK(1)
+         *vget,sx,node,1,S,X	
+         *vmask,NMASK(1)
+         *vget,sy,node,1,S,Y	
+         *vmask,NMASK(1)
+         *vget,sz,node,1,S,Z	
 
-        *do,i,1,{0}, 1 
-            ESEL,S,MAT,,i
-            /SHOW, PNG 
-            PLNSOL, S,EQV, 0, 1.0
-            /SHOW,CLOSE
-            *GET, MaxStressPar, PLNSOL, 0, MAX
-            *vwrite,MaxStressPar,
-%G
-        *enddo
-        *cfclos
-        esel,all
-        """.format(self.__matid)
+         *voper, sxandy, sx, add, sy
+         *voper, sxyz, sxandy, add, sz
+
+         *VABS, 0, 0, 1,	
+
+         *voper,stress_sig, sxyz,DIV,sxyz
+         *VABS, 0, 0, 0,0
+         *voper,sig_mises, stress_sig,MULT,Seqv
+
+         ! *vput, sig_mises, NODE, 1, S, INT 	
+
+         *MOPER, SeqvInit, sig_mises, SORT,,1
+
+         seqvmax095 = sig_mises(NINT(0.95*allnodecount))
+         seqvmax100 = sig_mises(NINT(1.00*allnodecount))
+
+         seqvmin095 = sig_mises(NINT(0.05*allnodecount))
+         seqvmin100 = sig_mises(NINT(0.00*allnodecount+1))
+         allsel,all
+    *vwrite,seqvmax095,seqvmax100,seqvmin095,seqvmin100
+    %G;%G;%G;%G
+       *enddo
+       *enddo
+       *cfclos
+       allsel,all
+            """.format(self.__matid, self.__ls_num-1)
 
         pass
 
@@ -477,44 +545,42 @@ class ansyswrapper:
 FINISH
 /post1
 
-set,last
 allsel,all
 
-
-/SHOW,PNG,,0
-PNGR,COMP,1,-1  
-PNGR,ORIENT,HORIZ   
-PNGR,COLOR,2
-PNGR,TMOD,1 
-/GFILE,1200,
+!/SHOW,PNG,,0
+!PNGR,COMP,1,-1  
+!PNGR,ORIENT,HORIZ   
+!PNGR,COLOR,2
+!PNGR,TMOD,1 
+!/GFILE,1200,
 !*  
-/CMAP,_TEMPCMAP_,CMP,,SAVE  
-/RGB,INDEX,100,100,100,0
-/RGB,INDEX,0,0,0,15 
+!/CMAP,_TEMPCMAP_,CMP,,SAVE  
+!/RGB,INDEX,100,100,100,0
+!/RGB,INDEX,0,0,0,15 
 
 !/VIEW,1,1,1,1   
 !/ANG,1  
 !/AUTO,1 
 
-/EFACET,1   
-PLNSOL, S, EQV, 0, 1.0
+!/EFACET,1   
+!PLNSOL, S, EQV, 0, 1.0
 
-/CMAP,_TEMPCMAP_,CMP
-/DELETE,_TEMPCMAP_,CMP  
-/SHOW,CLOSE 
-
-
-NSEL,R,S,EQV,,, ,0  
+!/CMAP,_TEMPCMAP_,CMP
+!/DELETE,_TEMPCMAP_,CMP  
+!/SHOW,CLOSE 
 
 *cfopen,'sigma_out',csv,,
+*do,j,1,{},1 
+    SET,,, ,,, ,j 
+    NSEL,R,S,EQV,,, ,0  
 
-*if,it_num,ne,0,then
+    *if,it_num,ne,0,then
 
-*vwrite,'sx','sy','sz','sxy','sxz','syz','ex','ey','ez','exy','exz','eyz'
+        *vwrite,'sx','sy','sz','sxy','sxz','syz','ex','ey','ez','exy','exz','eyz'
 %C;%C;%C;%C;%C;%C;%C;%C;%C;%C;%C;%C
 
-it_num = 0
-*endif
+        it_num = 0
+    *endif
 
 ETABLE, ,VOLU, ! Get element volume
 ETABLE, ,S,X ! Get element stress
@@ -583,7 +649,7 @@ EYZ0 = TOTEYZ/TOTVOL
 
 *vwrite,SXX0 ,SYY0 ,SZZ0 ,SXY0 ,SXZ0 ,SYZ0, EXX0 ,EYY0 ,EZZ0 ,EXY0 ,EXZ0 ,EYZ0 
 %E;%E;%E;%E;%E;%E;%E;%E;%E;%E;%E;%E
-
+*enddo
 *cfclos
 
 
