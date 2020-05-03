@@ -1,6 +1,7 @@
 import os
 import datetime
 import tempfile
+import sys
 
 from subprocess import call
 import numpy as np
@@ -11,11 +12,13 @@ class ansyswrapper:
     __csid = 10
     __ls_num = 1
 
-    def __init__(self, ans_hi_version=250, ans_low_version=50, anslic='ane3fl', infile='input.dat',
+    def __init__(self, path_to_and_bin=None, ans_hi_version=250, ans_low_version=50, anslic='ane3fl',
+                 infile='input.dat',
                  outfile='output.dat', projdir=tempfile.gettempdir(), isBatch=True, jobname=None):
 
         self.ans_hi_version = ans_hi_version
         self.ans_low_version = ans_low_version
+        self.path_to_ans_bin = path_to_and_bin
 
         self.anslic = anslic
         self.inputfile = infile
@@ -55,30 +58,40 @@ class ansyswrapper:
         f.close()
 
     def getNP(self):
-        return 4  # os.environ['NUMBER_OF_PROCESSORS']
+        return os.cpu_count()
 
     def findPathVersion(self):
+        if self.path_to_ans_bin:
+            return self.path_to_ans_bin
+        else:
+            __ansversion = -1
+            path = ""
+            for i in range(self.ans_hi_version, self.ans_low_version, -1):
+                if os.environ.get('ANSYS{0}_DIR'.format(i)):
+                    path = os.environ.get('ANSYS{0}_DIR'.format(i))
+                    __ansversion = i
+                    break
 
-        __ansversion = -1
-        path = ""
-        for i in range(self.ans_hi_version, self.ans_low_version, -1):
-            if os.environ.get('ANSYS{0}_DIR'.format(i)):
-                path = os.environ.get('ANSYS{0}_DIR'.format(i))
-                __ansversion = i
-                break
+            if __ansversion == -1:
+                print("Ansys not found")
+                exit(1)
+                return None
 
-        if __ansversion == -1:
-            print("Ansys not found")
-            return None
+            path += '\\bin\\' + os.environ['ANSYS_SYSDIR'] + '\\ANSYS{0}'.format(__ansversion)
 
-        path += '\\bin\\' + os.environ['ANSYS_SYSDIR'] + '\\ANSYS{0}'.format(__ansversion)
-
-        return path
+            return path
 
     def defaultArgs(self):
+        x_drivers = {
+            "linux": "X11",
+            "win": "win32"
+        }
+        i_file = os.path.abspath(self.projdir + os.sep + self.inputfile)
+        o_file = os.path.abspath(self.projdir + os.sep + self.outputfile)
+        p_dir = os.path.abspath(self.projdir)
         if self.__isBatch:
-            return '-b -p {0} -np {1} -dir {2} -j {3} -s noread -i {4} -o {5} -d win32'.format(
-                self.anslic, self.getNP(), self.projdir, self.jobname, self.inputfile, self.outputfile
+            return '-b -p {0} -smp -np {1} -dir {2} -j {3} -s noread -i {4} -o {5} -d {6}'.format(
+                self.anslic, self.getNP(), p_dir, self.jobname, i_file, o_file, x_drivers[sys.platform]
             )
         else:
             return '-g -p {0} -np {1} -dir {2} -j {2} -s read -d win32'.format(
@@ -90,9 +103,16 @@ class ansyswrapper:
         self.apdl += "/EXIT, NOSAVE,\n"
         cwd = os.getcwd()
         os.chdir(self.projdir)
-        self.saveToFile(self.projdir + "\\" + self.inputfile)
+        self.saveToFile(self.projdir + os.sep + self.inputfile)
 
-        retcode = call([self.findPathVersion()] + self.defaultArgs().split(" "))
+        print(['bash', self.findPathVersion()] + self.defaultArgs().split(" "))
+        print('bash ' + self.findPathVersion() + self.defaultArgs())
+
+        ret_code = 0
+        if sys.platform == "linux":
+            ret_code = call(['bash', self.findPathVersion()] + self.defaultArgs().split(" "))
+        elif sys.platform == "win":
+            ret_code = call([self.findPathVersion()] + self.defaultArgs().split(" "))
         os.chdir(cwd)
 
         exitcodes = dict()
@@ -119,16 +139,16 @@ class ansyswrapper:
         exitcodes[31] = 'Failure to Get Signal'
         exitcodes[32] = 'System-dependent Error'
 
-        if retcode > 32:
-            exitcodes[retcode] = 'Unknown Error. Check for *.lock files in working directory and delete it'
+        if ret_code > 32:
+            exitcodes[ret_code] = 'Unknown Error. Check for *.lock files in working directory and delete it'
 
-        if retcode in exitcodes:
+        if ret_code in exitcodes:
             print('------ANSYS ERROR EXIT CODE-------')
-            print('Ansys exit code = {0}, with message: {1}'.format(retcode, exitcodes[retcode]))
+            print('Ansys exit code = {0}, with message: {1}'.format(ret_code, exitcodes[ret_code]))
             print('----------------------------------')
             print('Terminating.......')
-            exit(retcode)
-        return retcode
+            exit(ret_code)
+        return ret_code
 
     def rectangle(self, x1, y1, x2, y2):
         self.apdl += "RECTNG,{0},{1},{2},{3},\n".format(x1, x2, y1, y2)
@@ -403,7 +423,7 @@ class ansyswrapper:
         self.__ls_num += 1
 
     def solve(self):
-        self.apdl += self.__post_new.format(self.__ls_num-1)
+        self.apdl += self.__post_new.format(self.__ls_num - 1)
         self.apdl += "FINISH\n"
         self.apdl += "/SOL\n"
         self.apdl += "SOLVE\n"
@@ -427,7 +447,7 @@ class ansyswrapper:
     def eof(self):
         self.apdl += "/eof\n"
 
-    def getAVGStressAndStrains(self, n = -1):
+    def getAVGStressAndStrains(self, n=-1):
         res = np.loadtxt(self.projdir + '/sigma_out.csv', dtype=float, delimiter=';', skiprows=1)
         stress = np.zeros((3, 3))
         strain = np.zeros((3, 3))
@@ -450,7 +470,7 @@ class ansyswrapper:
 
     def getMaxStressForEachMaterial(self, n):
         res = np.loadtxt(self.projdir + '/max_stress_out.csv', dtype=float, delimiter=';')
-        return res[2*n:2*n+2, :]
+        return res[2 * n:2 * n + 2, :]
 
     def saveMaxStressForEachMaterial(self):
         self.apdl += """
@@ -507,7 +527,7 @@ class ansyswrapper:
        *enddo
        *cfclos
        allsel,all
-            """.format(self.__matid, self.__ls_num-1)
+            """.format(self.__matid, self.__ls_num - 1)
 
         pass
 
